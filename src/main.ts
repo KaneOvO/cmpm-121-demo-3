@@ -3,6 +3,7 @@ import "./style.css";
 import leaflet from "leaflet";
 import luck from "./luck";
 import "./leafletWorkaround";
+import { Board } from "./board";
 
 const MERRILL_CLASSROOM = leaflet.latLng({
   lat: 36.9995,
@@ -15,6 +16,12 @@ const NEIGHBORHOOD_SIZE = 8;
 const PIT_SPAWN_PROBABILITY = 0.1;
 
 const mapContainer = document.querySelector<HTMLElement>("#map")!;
+const board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
+
+interface Cell {
+  readonly i: number;
+  readonly j: number;
+}
 
 const map = leaflet.map(mapContainer, {
   center: MERRILL_CLASSROOM,
@@ -50,25 +57,18 @@ let points = 0;
 const statusPanel = document.querySelector<HTMLDivElement>("#statusPanel")!;
 statusPanel.innerHTML = "No points yet...";
 
-function makePit(i: number, j: number) {
-  const bounds = leaflet.latLngBounds([
-    [
-      MERRILL_CLASSROOM.lat + i * TILE_DEGREES,
-      MERRILL_CLASSROOM.lng + j * TILE_DEGREES,
-    ],
-    [
-      MERRILL_CLASSROOM.lat + (i + 1) * TILE_DEGREES,
-      MERRILL_CLASSROOM.lng + (j + 1) * TILE_DEGREES,
-    ],
-  ]);
+function makePit(cell: Cell) {
+  const bounds = board.getCellBounds(cell);
 
   const pit = leaflet.rectangle(bounds) as leaflet.Layer;
 
   pit.bindPopup(() => {
-    let value = Math.floor(luck([i, j, "initialValue"].toString()) * 100);
+    let value = Math.floor(
+      luck([cell.i, cell.j, "initialValue"].toString()) * 100
+    );
     const container = document.createElement("div");
     container.innerHTML = `
-                <div>There is a pit here at "${i},${j}". It has value <span id="value">${value}</span>.</div>
+                <div>There is a pit here at "${cell.i},${cell.j}". It has value <span id="value">${value}</span>.</div>
                 <button id="poke">poke</button>
                 <button id="deposit">deposit</button>`;
 
@@ -87,7 +87,10 @@ function makePit(i: number, j: number) {
 
     const deposit = container.querySelector<HTMLButtonElement>("#deposit")!;
     deposit.addEventListener("click", () => {
-      if (points <= 0) return;
+      if (points <= 0) {
+        alert("You have no points to deposit!");
+        return;
+      }
 
       value++;
       container.querySelector<HTMLSpanElement>("#value")!.innerHTML =
@@ -102,10 +105,8 @@ function makePit(i: number, j: number) {
   pit.addTo(map);
 }
 
-for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
-  for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
-    if (luck([i, j].toString()) < PIT_SPAWN_PROBABILITY) {
-      makePit(i, j);
-    }
+board.getCellsNearPoint(MERRILL_CLASSROOM).forEach((cell) => {
+  if (luck([cell.i, cell.j].toString()) < PIT_SPAWN_PROBABILITY) {
+    makePit(cell);
   }
-}
+});
