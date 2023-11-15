@@ -5,11 +5,21 @@ interface Cell {
   readonly j: number;
 }
 
+interface Coin {
+  cell: Cell;
+  serial: number;
+}
+
 export class Board {
   readonly tileWidth: number;
   readonly tileVisibilityRadius: number;
 
   private readonly knownCells: Map<string, Cell>;
+  private readonly coins: Coin[] = [];
+  private readonly coinSerialsByCell: Map<string, Set<number>> = new Map<
+    string,
+    Set<number>
+  >();
 
   constructor(tileWidth: number, tileVisibilityRadius: number) {
     this.tileWidth = tileWidth;
@@ -62,4 +72,43 @@ export class Board {
 
     return resultCells;
   }
+
+  addCoin(cell: Cell): void {
+    const cellKey = cellToString(cell);
+
+    if (!this.coinSerialsByCell.has(cellKey)) {
+      this.coinSerialsByCell.set(cellKey, new Set());
+    }
+
+    const serials = this.coinSerialsByCell.get(cellKey)!;
+
+    let serial = 0;
+    while (serials.has(serial)) {
+      serial++;
+    }
+
+    serials.add(serial);
+
+    const coin: Coin = { cell, serial };
+    this.coins.push(coin);
+  }
+
+  getCoins(): Coin[] {
+    return this.coins;
+  }
+
+  // removeCoin(cell:Cell): void {
+  //   const cellKey = cellToString(cell);
+  //   const serials = this.coinSerialsByCell.get(cellKey)!;
+  //   const serial: number = serials.values().next().value;
+  //   serials.delete(serial);
+  //   this.coins.splice(
+  //     this.coins.findIndex((coin) => coin.cell === cell && coin.serial === serial),
+  //     1
+  //   );
+  // }
+}
+
+function cellToString(cell: Cell): string {
+  return `${cell.i},${cell.j}`;
 }
