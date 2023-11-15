@@ -97,16 +97,42 @@ export class Board {
     return this.coins;
   }
 
-  // removeCoin(cell:Cell): void {
-  //   const cellKey = cellToString(cell);
-  //   const serials = this.coinSerialsByCell.get(cellKey)!;
-  //   const serial: number = serials.values().next().value;
-  //   serials.delete(serial);
-  //   this.coins.splice(
-  //     this.coins.findIndex((coin) => coin.cell === cell && coin.serial === serial),
-  //     1
-  //   );
-  // }
+  removeCoin(cell: Cell): Coin | null {
+    const cellKey = cellToString(cell);
+
+    if (!this.coinSerialsByCell.has(cellKey)) {
+      return null;
+    }
+
+    const serials = this.coinSerialsByCell.get(cellKey)!;
+
+    if (serials.size === 0) {
+      return null;
+    }
+
+    let minSerial = Number.MAX_SAFE_INTEGER;
+    serials.forEach((serial) => {
+      if (serial < minSerial) {
+        minSerial = serial;
+      }
+    });
+
+    serials.delete(minSerial);
+
+    const index = this.coins.findIndex(
+      (coin) =>
+        coin.cell.i === cell.i &&
+        coin.cell.j === cell.j &&
+        coin.serial === minSerial
+    );
+
+    if (index !== -1) {
+      const removedCoin = this.coins.splice(index, 1)[0];
+      return removedCoin;
+    }
+
+    return null;
+  }
 }
 
 function cellToString(cell: Cell): string {
