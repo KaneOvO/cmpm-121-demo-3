@@ -1,13 +1,8 @@
 import leaflet from "leaflet";
 
-interface Cell {
+export interface Cell {
   readonly i: number;
   readonly j: number;
-}
-
-interface Coin {
-  cell: Cell;
-  serial: number;
 }
 
 export class Board {
@@ -15,11 +10,6 @@ export class Board {
   readonly tileVisibilityRadius: number;
 
   private readonly knownCells: Map<string, Cell>;
-  private readonly coins: Coin[] = [];
-  private readonly coinSerialsByCell: Map<string, Set<number>> = new Map<
-    string,
-    Set<number>
-  >();
 
   constructor(tileWidth: number, tileVisibilityRadius: number) {
     this.tileWidth = tileWidth;
@@ -72,69 +62,4 @@ export class Board {
 
     return resultCells;
   }
-
-  addCoin(cell: Cell): void {
-    const cellKey = cellToString(cell);
-
-    if (!this.coinSerialsByCell.has(cellKey)) {
-      this.coinSerialsByCell.set(cellKey, new Set());
-    }
-
-    const serials = this.coinSerialsByCell.get(cellKey)!;
-
-    let serial = 0;
-    while (serials.has(serial)) {
-      serial++;
-    }
-
-    serials.add(serial);
-
-    const coin: Coin = { cell, serial };
-    this.coins.push(coin);
-  }
-
-  getCoins(): Coin[] {
-    return this.coins;
-  }
-
-  removeCoin(cell: Cell): Coin | null {
-    const cellKey = cellToString(cell);
-
-    if (!this.coinSerialsByCell.has(cellKey)) {
-      return null;
-    }
-
-    const serials = this.coinSerialsByCell.get(cellKey)!;
-
-    if (serials.size === 0) {
-      return null;
-    }
-
-    let minSerial = Number.MAX_SAFE_INTEGER;
-    serials.forEach((serial) => {
-      if (serial < minSerial) {
-        minSerial = serial;
-      }
-    });
-
-    serials.delete(minSerial);
-
-    const index = this.coins.findIndex(
-      (coin) =>
-        coin.cell.i === cell.i &&
-        coin.cell.j === cell.j &&
-        coin.serial === minSerial
-    );
-
-    if (index !== -1) {
-      const removedCoin = this.coins.splice(index, 1)[0];
-      return removedCoin;
-    }
-
-    return null;
-  }
-}
-
-function cellToString(cell: Cell): string {
-  return `${cell.i},${cell.j}`;
 }
