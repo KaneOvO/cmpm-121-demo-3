@@ -3,10 +3,8 @@ import "./style.css";
 import leaflet from "leaflet";
 import luck from "./luck";
 import "./leafletWorkaround";
-import { Board } from "./board";
-import { Cell } from "./board";
-import { Coin } from "./coin";
-import { Coins } from "./coin";
+import { Board, Cell } from "./board";
+import { Coin, Coins } from "./coin";
 
 const MERRILL_CLASSROOM = leaflet.latLng({
   lat: 36.9995,
@@ -21,6 +19,7 @@ let CURRENT_COIN: Coin | null = null;
 const PLAYER_COINS: Coin[] = [];
 const pitGeneratedFlags: Record<string, boolean> = {};
 const pitValue: Record<string, number> = {};
+const onMapPits: leaflet.Layer[] = [];
 
 const mapContainer = document.querySelector<HTMLElement>("#map")!;
 const board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
@@ -56,6 +55,26 @@ sensorButton.addEventListener("click", () => {
   });
 });
 
+const northButton = document.querySelector("#north")!;
+northButton.addEventListener("click", () => {
+  updatePlayerPosition("north");
+});
+
+const southButton = document.querySelector("#south")!;
+southButton.addEventListener("click", () => {
+  updatePlayerPosition("south");
+});
+
+const eastButton = document.querySelector("#east")!;
+eastButton.addEventListener("click", () => {
+  updatePlayerPosition("east");
+});
+
+const westButton = document.querySelector("#west")!;
+westButton.addEventListener("click", () => {
+  updatePlayerPosition("west");
+});
+
 let points = 0;
 const statusPanel = document.querySelector<HTMLDivElement>("#statusPanel")!;
 statusPanel.innerHTML = "No points yet...";
@@ -75,7 +94,7 @@ function makePit(cell: Cell) {
         coins.addCoin(cell);
       }
 
-      pitGeneratedFlags[cellToString(cell)] = true; // 设置标志，表示已经生成过硬币
+      pitGeneratedFlags[cellToString(cell)] = true;
     }
 
     const container = document.createElement("div");
@@ -132,13 +151,10 @@ function makePit(cell: Cell) {
     return container;
   });
   pit.addTo(map);
+  onMapPits.push(pit);
 }
 
-board.getCellsNearPoint(MERRILL_CLASSROOM).forEach((cell) => {
-  if (luck([cell.i, cell.j].toString()) < PIT_SPAWN_PROBABILITY) {
-    makePit(cell);
-  }
-});
+updateCacheLocations(MERRILL_CLASSROOM);
 
 function getCoinInfoHtml(cell: Cell): string {
   const coinList = coins.getCoins(cell);
@@ -157,4 +173,42 @@ function getCoinInfoHtml(cell: Cell): string {
 
 function cellToString(cell: Cell): string {
   return `${cell.i},${cell.j}`;
+}
+
+function updatePlayerPosition(direction: string) {
+  const position = playerMarker.getLatLng();
+  switch (direction) {
+    case "north":
+      position.lat += TILE_DEGREES;
+      break;
+    case "south":
+      position.lat -= TILE_DEGREES;
+      break;
+    case "east":
+      position.lng += TILE_DEGREES;
+      break;
+    case "west":
+      position.lng -= TILE_DEGREES;
+      break;
+    default:
+      console.error("Invalid direction");
+  }
+  playerMarker.setLatLng(position);
+  map.setView(position);
+  updateCacheLocations(position);
+}
+
+function updateCacheLocations(currentPosition: leaflet.LatLng) {
+  removeAllPits();
+
+  board.getCellsNearPoint(currentPosition).forEach((cell) => {
+    if (luck([cell.i, cell.j].toString()) < PIT_SPAWN_PROBABILITY) {
+      makePit(cell);
+    }
+  });
+}
+
+function removeAllPits() {
+  onMapPits.forEach((pit) => pit.removeFrom(map));
+  onMapPits.length = 0;
 }
