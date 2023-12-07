@@ -4,7 +4,7 @@ import leaflet from "leaflet";
 import luck from "./luck";
 import "./leafletWorkaround";
 import { Board, Cell } from "./board";
-import { Coin, Coins } from "./coin";
+import { Coin, Geocache } from "./coin";
 
 const MERRILL_CLASSROOM = leaflet.latLng({
   lat: 36.9995,
@@ -17,13 +17,11 @@ const NEIGHBORHOOD_SIZE = 8;
 const PIT_SPAWN_PROBABILITY = 0.1;
 let CURRENT_COIN: Coin | null = null;
 const PLAYER_COINS: Coin[] = [];
-const pitGeneratedFlags: Record<string, boolean> = {};
-const pitValue: Record<string, number> = {};
 const onMapPits: leaflet.Layer[] = [];
+const geoCaches = new Map<Cell, string>();
 
 const mapContainer = document.querySelector<HTMLElement>("#map")!;
 const board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
-const coins = new Coins();
 
 const map = leaflet.map(mapContainer, {
   center: MERRILL_CLASSROOM,
@@ -81,53 +79,54 @@ statusPanel.innerHTML = "No points yet...";
 
 function makePit(cell: Cell) {
   const bounds = board.getCellBounds(cell);
-
   const pit = leaflet.rectangle(bounds) as leaflet.Layer;
 
   pit.bindPopup(() => {
-    if (!pitGeneratedFlags[cellToString(cell)]) {
-      pitValue[cellToString(cell)] = Math.floor(
+    const geoCache = new Geocache(cell);
+    if (geoCaches.has(cell)) {
+      const moment: string = geoCaches.get(cell)!;
+      geoCache.fromMomento(moment);
+    } else {
+      const coins: Coin[] = [];
+      const initialCoinCount = Math.floor(
         luck([cell.i, cell.j, "initialValue"].toString()) * 100
       );
-
-      for (let i = 0; i < pitValue[cellToString(cell)]; i++) {
-        coins.addCoin(cell);
+      for (let serial = 0; serial < initialCoinCount; serial++) {
+        coins.push({ cell, serial });
       }
-
-      pitGeneratedFlags[cellToString(cell)] = true;
+      geoCache.coins = coins;
+      geoCaches.set(cell, geoCache.toMomento());
     }
 
     const container = document.createElement("div");
     container.innerHTML = `
-                <div>There is a pit here at "${cell.i},${
-      cell.j
-    }". It has value <span id="value">${
-      pitValue[cellToString(cell)]
-    }</span>.</div>
+                <div>There is a pit here at "${cell.i},${cell.j}". It has value <span id="value">${geoCache.coins.length}</span>.</div>
                 <div class="coinInfo" style="height: 100px; overflow-y: scroll;"></div>
                 <button id="poke">poke</button>
                 <button id="deposit">deposit</button>`;
 
     const coinInfo = container.querySelector<HTMLDivElement>(".coinInfo")!;
-    coinInfo.innerHTML = getCoinInfoHtml(cell);
+    coinInfo.innerHTML = getCoinInfoHtml(geoCache);
 
     const poke = container.querySelector<HTMLButtonElement>("#poke")!;
     poke.addEventListener("click", () => {
-      if (pitValue[cellToString(cell)] <= 0) {
+      if (geoCache.coins.length <= 0) {
         alert("You have poked the pit too much and it has disappeared!");
         return;
       }
-      points++;
-      statusPanel.innerHTML = `${points} points accumulated`;
-      pitValue[cellToString(cell)]--;
-      container.querySelector<HTMLSpanElement>("#value")!.innerHTML =
-        pitValue[cellToString(cell)].toString();
 
-      CURRENT_COIN = coins.removeCoin(cell);
+      CURRENT_COIN = geoCache.removeCoin();
       if (CURRENT_COIN) {
         PLAYER_COINS.push(CURRENT_COIN);
       }
-      coinInfo.innerHTML = getCoinInfoHtml(cell);
+      geoCaches.set(cell, geoCache.toMomento());
+
+      points++;
+      statusPanel.innerHTML = `${points} points accumulated`;
+      container.querySelector<HTMLSpanElement>("#value")!.innerHTML =
+        geoCache.coins.length.toString();
+
+      coinInfo.innerHTML = getCoinInfoHtml(geoCache);
     });
 
     const deposit = container.querySelector<HTMLButtonElement>("#deposit")!;
@@ -137,15 +136,15 @@ function makePit(cell: Cell) {
         return;
       }
 
-      pitValue[cellToString(cell)]++;
+      geoCache.depositCoin(PLAYER_COINS.pop()!);
+      geoCaches.set(cell, geoCache.toMomento());
+
+      coinInfo.innerHTML = getCoinInfoHtml(geoCache);
       container.querySelector<HTMLSpanElement>("#value")!.innerHTML =
-        pitValue[cellToString(cell)].toString();
+        geoCache.coins.length.toString();
       points--;
       statusPanel.innerHTML =
         points === 0 ? `No points yet...` : `${points} points accumulated`;
-
-      coins.depositCoin(cell, PLAYER_COINS.pop()!);
-      coinInfo.innerHTML = getCoinInfoHtml(cell);
     });
 
     return container;
@@ -156,8 +155,8 @@ function makePit(cell: Cell) {
 
 updateCacheLocations(MERRILL_CLASSROOM);
 
-function getCoinInfoHtml(cell: Cell): string {
-  const coinList = coins.getCoins(cell);
+function getCoinInfoHtml(geoCache: Geocache): string {
+  const coinList = geoCache.coins;
 
   const coinInfoHtml = coinList
     .map(
@@ -171,9 +170,9 @@ function getCoinInfoHtml(cell: Cell): string {
   return coinInfoHtml;
 }
 
-function cellToString(cell: Cell): string {
-  return `${cell.i},${cell.j}`;
-}
+// function cellToString(cell: Cell): string {
+//   return `${cell.i},${cell.j}`;
+// }
 
 function updatePlayerPosition(direction: string) {
   const position = playerMarker.getLatLng();
