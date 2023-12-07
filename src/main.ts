@@ -5,6 +5,7 @@ import luck from "./luck";
 import "./leafletWorkaround";
 import { Board, Cell } from "./board";
 import { Coin, Geocache } from "./coin";
+import "leaflet/dist/leaflet.css";
 
 const MERRILL_CLASSROOM = leaflet.latLng({
   lat: 36.9995,
@@ -16,12 +17,15 @@ const TILE_DEGREES = 1e-4;
 const NEIGHBORHOOD_SIZE = 8;
 const PIT_SPAWN_PROBABILITY = 0.1;
 let CURRENT_COIN: Coin | null = null;
-const PLAYER_COINS: Coin[] = [];
+let PLAYER_COINS: Coin[] = [];
 const onMapPits: leaflet.Layer[] = [];
-const geoCaches = new Map<Cell, string>();
+let geoCaches = new Map<string, string>();
+const playerPath: leaflet.LatLng[] = [];
 
 const mapContainer = document.querySelector<HTMLElement>("#map")!;
 const board = new Board(TILE_DEGREES, NEIGHBORHOOD_SIZE);
+
+let playerPolyline: leaflet.Polyline | null = null;
 
 const map = leaflet.map(mapContainer, {
   center: MERRILL_CLASSROOM,
@@ -73,6 +77,11 @@ westButton.addEventListener("click", () => {
   updatePlayerPosition("west");
 });
 
+const resetButton = document.querySelector("#reset")!;
+resetButton.addEventListener("click", () => {
+  resetGame();
+});
+
 let points = 0;
 const statusPanel = document.querySelector<HTMLDivElement>("#statusPanel")!;
 statusPanel.innerHTML = "No points yet...";
@@ -83,8 +92,8 @@ function makePit(cell: Cell) {
 
   pit.bindPopup(() => {
     const geoCache = new Geocache(cell);
-    if (geoCaches.has(cell)) {
-      const moment: string = geoCaches.get(cell)!;
+    if (geoCaches.has(cellToString(cell))) {
+      const moment: string = geoCaches.get(cellToString(cell))!;
       geoCache.fromMomento(moment);
     } else {
       const coins: Coin[] = [];
@@ -95,7 +104,7 @@ function makePit(cell: Cell) {
         coins.push({ cell, serial });
       }
       geoCache.coins = coins;
-      geoCaches.set(cell, geoCache.toMomento());
+      geoCaches.set(cellToString(cell), geoCache.toMomento());
     }
 
     const container = document.createElement("div");
@@ -119,7 +128,7 @@ function makePit(cell: Cell) {
       if (CURRENT_COIN) {
         PLAYER_COINS.push(CURRENT_COIN);
       }
-      geoCaches.set(cell, geoCache.toMomento());
+      geoCaches.set(cellToString(cell), geoCache.toMomento());
 
       points++;
       statusPanel.innerHTML = `${points} points accumulated`;
@@ -137,7 +146,7 @@ function makePit(cell: Cell) {
       }
 
       geoCache.depositCoin(PLAYER_COINS.pop()!);
-      geoCaches.set(cell, geoCache.toMomento());
+      geoCaches.set(cellToString(cell), geoCache.toMomento());
 
       coinInfo.innerHTML = getCoinInfoHtml(geoCache);
       container.querySelector<HTMLSpanElement>("#value")!.innerHTML =
@@ -153,6 +162,7 @@ function makePit(cell: Cell) {
   onMapPits.push(pit);
 }
 
+loadGameState();
 updateCacheLocations(MERRILL_CLASSROOM);
 
 function getCoinInfoHtml(geoCache: Geocache): string {
@@ -195,6 +205,9 @@ function updatePlayerPosition(direction: string) {
   playerMarker.setLatLng(position);
   map.setView(position);
   updateCacheLocations(position);
+
+  playerPath.push(Object.assign({}, position));
+  updatePlayerPath();
 }
 
 function updateCacheLocations(currentPosition: leaflet.LatLng) {
@@ -210,4 +223,52 @@ function updateCacheLocations(currentPosition: leaflet.LatLng) {
 function removeAllPits() {
   onMapPits.forEach((pit) => pit.removeFrom(map));
   onMapPits.length = 0;
+}
+
+function updatePlayerPath() {
+  if (playerPolyline) {
+    playerPolyline.removeFrom(map);
+  }
+
+  playerPolyline = leaflet.polyline(playerPath, { color: "Purple" }).addTo(map);
+}
+
+function saveGameState() {
+  const cachesArr = Array.from(geoCaches);
+  const serializedCaches = JSON.stringify(cachesArr);
+  const serializedPlayerCoins = JSON.stringify(PLAYER_COINS);
+
+  localStorage.setItem("geoCaches", serializedCaches);
+  localStorage.setItem("playerCoins", serializedPlayerCoins);
+}
+
+addEventListener("beforeunload", () => {
+  saveGameState();
+});
+
+function loadGameState() {
+  const serializedCaches = localStorage.getItem("geoCaches");
+  const serializedPlayerCoins = localStorage.getItem("playerCoins");
+
+  if (serializedCaches) {
+    const derializedCaches = JSON.parse(serializedCaches) as [string, string][];
+    geoCaches = new Map(derializedCaches);
+  }
+
+  if (serializedPlayerCoins) {
+    PLAYER_COINS = JSON.parse(serializedPlayerCoins) as Coin[];
+    points = PLAYER_COINS.length;
+    statusPanel.innerHTML = `${points} points accumulated`;
+  }
+}
+
+function resetGame() {
+  localStorage.clear();
+  geoCaches.clear();
+  PLAYER_COINS = [];
+  location.reload();
+}
+
+function cellToString(cell: Cell): string {
+  return `${cell.i},${cell.j}`;
 }
